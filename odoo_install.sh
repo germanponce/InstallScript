@@ -26,7 +26,7 @@ INSTALL_WKHTMLTOPDF="True"
 OE_PORT="8069"
 #Choose the Odoo version which you want to install. For example: 9.0, 8.0, 7.0 or saas-6. When using 'trunk' the master version will be installed.
 #IMPORTANT! This script contains extra libraries that are specifically needed for Odoo 9.0
-OE_VERSION="9.0"
+OE_VERSION="10.0"
 #set the superadmin password
 OE_SUPERADMIN="admin"
 OE_CONFIG="${OE_USER}-server"
@@ -129,81 +129,87 @@ sudo su root -c "echo '#!/bin/sh' >> $OE_HOME_EXT/start.sh"
 sudo su root -c "echo 'sudo -u $OE_USER $OE_HOME_EXT/openerp-server --config=/etc/${OE_CONFIG}.conf' >> $OE_HOME_EXT/start.sh"
 sudo chmod 755 $OE_HOME_EXT/start.sh
 
+echo -e "* Create log file"
+
+sudo su mkdir $OE_HOME_EXT/log
 #--------------------------------------------------
 # Adding ODOO as a deamon (initscript)
 #--------------------------------------------------
 
 echo -e "* Create init file"
 cat <<EOF > ~/$OE_CONFIG
-#!/bin/sh
+#!/bin/bash
 ### BEGIN INIT INFO
-# Provides: $OE_CONFIG
-# Required-Start: \$remote_fs \$syslog
-# Required-Stop: \$remote_fs \$syslog
-# Should-Start: \$network
-# Should-Stop: \$network
-# Default-Start: 2 3 4 5
-# Default-Stop: 0 1 6
-# Short-Description: Enterprise Business Applications
-# Description: ODOO Business Applications
+# Provides:          odoo
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Start odoo daemon at boot time
+# Description:       Enable service provided by daemon.
+# X-Interactive:     true
 ### END INIT INFO
-PATH=/bin:/sbin:/usr/bin
-DAEMON=$OE_HOME_EXT/openerp-server
-NAME=$OE_CONFIG
-DESC=$OE_CONFIG
+## more info: http://wiki.debian.org/LSBInitScripts
 
-# Specify the user name (Default: odoo).
-USER=$OE_USER
+. /lib/lsb/init-functions
 
-# Specify an alternate config file (Default: /etc/openerp-server.conf).
-CONFIGFILE="/etc/${OE_CONFIG}.conf"
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin
+DAEMON=/odoo/odoo-server/odoo-bin
+NAME=odoo
+DESC=odoo
+CONFIG=/etc/odoo-server.conf
+LOGFILE=/odoo/odoo-server/log/odoo-server.log
+PIDFILE=/var/run/${NAME}.pid
+USER=odoo
+export LOGNAME=$USER
 
-# pidfile
-PIDFILE=/var/run/\${NAME}.pid
+test -x $DAEMON || exit 0
+set -e
 
-# Additional options that are passed to the Daemon.
-DAEMON_OPTS="-c \$CONFIGFILE"
-[ -x \$DAEMON ] || exit 0
-[ -f \$CONFIGFILE ] || exit 0
-checkpid() {
-[ -f \$PIDFILE ] || return 1
-pid=\`cat \$PIDFILE\`
-[ -d /proc/\$pid ] && return 0
-return 1
+function _start() {
+    start-stop-daemon --start --quiet --pidfile $PIDFILE --chuid $USER:$USER --background --make-pidfile --exec $DAEMON -- --config $CONFIG --logfile $LOGFILE
 }
 
-case "\${1}" in
-start)
-echo -n "Starting \${DESC}: "
-start-stop-daemon --start --quiet --pidfile \$PIDFILE \
---chuid \$USER --background --make-pidfile \
---exec \$DAEMON -- \$DAEMON_OPTS
-echo "\${NAME}."
-;;
-stop)
-echo -n "Stopping \${DESC}: "
-start-stop-daemon --stop --quiet --pidfile \$PIDFILE \
---oknodo
-echo "\${NAME}."
-;;
+function _stop() {
+    start-stop-daemon --stop --quiet --pidfile $PIDFILE --oknodo --retry 3
+    rm -f $PIDFILE
+}
 
-restart|force-reload)
-echo -n "Restarting \${DESC}: "
-start-stop-daemon --stop --quiet --pidfile \$PIDFILE \
---oknodo
-sleep 1
-start-stop-daemon --start --quiet --pidfile \$PIDFILE \
---chuid \$USER --background --make-pidfile \
---exec \$DAEMON -- \$DAEMON_OPTS
-echo "\${NAME}."
-;;
-*)
-N=/etc/init.d/\$NAME
-echo "Usage: \$NAME {start|stop|restart|force-reload}" >&2
-exit 1
-;;
+function _status() {
+    start-stop-daemon --status --quiet --pidfile $PIDFILE
+    return $?
+}
 
+
+case "$1" in
+        start)
+                echo -n "Starting $DESC: "
+                _start
+                echo "ok"
+                ;;
+        stop)
+                echo -n "Stopping $DESC: "
+                _stop
+                echo "ok"
+                ;;
+        restart|force-reload)
+                echo -n "Restarting $DESC: "
+                _stop
+                sleep 1
+                _start
+                echo "ok"
+                ;;
+        status)
+                echo -n "Status of $DESC: "
+                _status && echo "running" || echo "stopped"
+                ;;
+        *)
+                N=/etc/init.d/$NAME
+                echo "Usage: $N {start|stop|restart|force-reload|status}" >&2
+                exit 1
+                ;;
 esac
+
 exit 0
 EOF
 
