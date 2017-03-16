@@ -136,8 +136,8 @@ sudo su root -c "echo 'sudo -u $OE_USER $OE_HOME_EXT/openerp-server --config=/et
 sudo chmod 755 $OE_HOME_EXT/start.sh
 
 echo -e "* Create log file"
+sudo su $OE_USER -c "mkdir $OE_HOME_EXT/log"
 
-sudo su mkdir $OE_HOME_EXT/log
 #--------------------------------------------------
 # Adding ODOO as a deamon (initscript)
 #--------------------------------------------------
